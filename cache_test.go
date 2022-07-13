@@ -40,7 +40,7 @@ func TestGrpcClientCache(t *testing.T) {
 		}()
 	}
 
-	c := NewGrpcClientConnCache([]grpc.DialOption{grpc.WithInsecure()})
+	c := DefaultClientConnCache
 
 	c.RLock()
 	clength := len(c.conns)
