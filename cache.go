@@ -151,7 +151,10 @@ func (gcc *grpcClientConnCache) checkPending(ctx context.Context, addr netaddr.I
 func (gcc *grpcClientConnCache) get(addr netaddr.IPPort) grpc.ClientConnInterface {
 	gcc.RLock()
 	defer gcc.RUnlock()
-	return gcc.conns[addr]
+	if c, ok := gcc.conns[addr]; ok {
+		return c
+	}
+	return nil
 }
 
 // Close will cancel the internal context which triggers the `WaitForStateChange` to
