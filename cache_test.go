@@ -42,9 +42,9 @@ func TestGrpcClientCache(t *testing.T) {
 
 	c := DefaultClientConnCache
 
-	c.RLock()
+	c.l.RLock()
 	clength := len(c.conns)
-	c.RUnlock()
+	c.l.RUnlock()
 	if clength != 0 {
 		t.Fatalf("connections should be 0, got %d", clength)
 	}
@@ -65,18 +65,18 @@ func TestGrpcClientCache(t *testing.T) {
 		}
 	}
 
-	c.RLock()
+	c.l.RLock()
 	clength = len(c.conns)
-	c.RUnlock()
+	c.l.RUnlock()
 	if clength != 100 {
 		t.Fatalf("connections should be 100, got %d", clength)
 	}
 
 	time.Sleep(6 * time.Second) // Let server send GOAWAY
 
-	c.RLock()
+	c.l.RLock()
 	clength = len(c.conns)
-	c.RUnlock()
+	c.l.RUnlock()
 	if clength != 0 {
 		t.Fatalf("connections should be 0, got %d", clength)
 	}
@@ -97,18 +97,18 @@ func TestGrpcClientCache(t *testing.T) {
 		}
 	}
 
-	c.RLock()
+	c.l.RLock()
 	clength = len(c.conns)
-	c.RUnlock()
+	c.l.RUnlock()
 	if clength != 100 {
 		t.Fatalf("connections should be 100, got %d", clength)
 	}
 
 	c.Close() // Clean up the cache and all connections
 
-	c.RLock()
+	c.l.RLock()
 	clength = len(c.conns)
-	c.RUnlock()
+	c.l.RUnlock()
 	if clength != 0 {
 		t.Fatalf("connections should be 0, got %d", clength)
 	}

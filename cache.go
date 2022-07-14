@@ -17,7 +17,7 @@ var DefaultClientConnCache = NewGrpcClientConnCache([]grpc.DialOption{
 
 // grpcClientConnCache is the container for client connections
 type grpcClientConnCache struct {
-	sync.RWMutex
+	l sync.RWMutex
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -69,9 +69,9 @@ func (gcc *grpcClientConnCache) Get(ctx context.Context, addr netaddr.IPPort) (g
 	// Not in the cache
 
 	c := make(chan struct{})
-	gcc.Lock()
+	gcc.l.Lock()
 	gcc.pendingConns[addr] = c
-	gcc.Unlock()
+	gcc.l.Unlock()
 
 	opts := []grpc.DialOption{
 		grpc.WithBlock(),
@@ -99,9 +99,9 @@ func (gcc *grpcClientConnCache) Get(ctx context.Context, addr netaddr.IPPort) (g
 // and indicate either inactivity, connectivity problems or something else.
 func (gcc *grpcClientConnCache) watch(conn grpc.ClientConnInterface, addr netaddr.IPPort) {
 	if conn.(*grpc.ClientConn).WaitForStateChange(gcc.ctx, connectivity.Ready) {
-		gcc.Lock()
+		gcc.l.Lock()
 		delete(gcc.conns, addr)
-		gcc.Unlock()
+		gcc.l.Unlock()
 		_ = conn.(*grpc.ClientConn).Close()
 	}
 }
@@ -109,17 +109,17 @@ func (gcc *grpcClientConnCache) watch(conn grpc.ClientConnInterface, addr netadd
 // removePending will remove the pending connection and then close the channel for
 // any listener. This acts as a broadcast for all listeners to then pull from the cache
 func (gcc *grpcClientConnCache) removePending(addr netaddr.IPPort, c chan struct{}) {
-	gcc.Lock()
+	gcc.l.Lock()
 	// Remove *after* connection is added to cache, to avoid misses
 	delete(gcc.pendingConns, addr)
 	close(c)
-	gcc.Unlock()
+	gcc.l.Unlock()
 }
 
 // addToCache will add a connection to the connection map to be cached
 func (gcc *grpcClientConnCache) addToCache(addr netaddr.IPPort, conn *grpc.ClientConn) {
-	gcc.Lock()
-	defer gcc.Unlock()
+	gcc.l.Lock()
+	defer gcc.l.Unlock()
 
 	gcc.conns[addr] = conn
 }
@@ -129,9 +129,9 @@ func (gcc *grpcClientConnCache) addToCache(addr netaddr.IPPort, conn *grpc.Clien
 // of connection failure it will return `DialFailedError`. If no broadcast is received before
 // the context times out the timeout error is returned
 func (gcc *grpcClientConnCache) checkPending(ctx context.Context, addr netaddr.IPPort) (grpc.ClientConnInterface, error) {
-	gcc.RLock()
+	gcc.l.RLock()
 	if c, ok := gcc.pendingConns[addr]; ok {
-		gcc.RUnlock()
+		gcc.l.RUnlock()
 		select {
 		case _, _ = <-c:
 			if c := gcc.get(addr); c != nil {
@@ -143,14 +143,14 @@ func (gcc *grpcClientConnCache) checkPending(ctx context.Context, addr netaddr.I
 			return nil, ctx.Err()
 		}
 	}
-	gcc.RUnlock()
+	gcc.l.RUnlock()
 	return nil, nil
 }
 
 // get returns any connection if it exists
 func (gcc *grpcClientConnCache) get(addr netaddr.IPPort) grpc.ClientConnInterface {
-	gcc.RLock()
-	defer gcc.RUnlock()
+	gcc.l.RLock()
+	defer gcc.l.RUnlock()
 	if c, ok := gcc.conns[addr]; ok {
 		return c
 	}
@@ -163,8 +163,8 @@ func (gcc *grpcClientConnCache) get(addr netaddr.IPPort) grpc.ClientConnInterfac
 func (gcc *grpcClientConnCache) Close() {
 	gcc.cancel()
 
-	gcc.Lock()
-	defer gcc.Unlock()
+	gcc.l.Lock()
+	defer gcc.l.Unlock()
 
 	for k, v := range gcc.conns {
 		delete(gcc.conns, k)
